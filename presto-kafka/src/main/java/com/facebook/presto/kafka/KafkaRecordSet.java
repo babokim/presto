@@ -304,6 +304,7 @@ public class KafkaRecordSet
         private void openFetchRequest()
         {
             if (messageAndOffsetIterator == null) {
+                Thread.dumpStack();
                 log.debug("Fetching %d bytes from offset %d (%d - %d). %d messages read so far", KAFKA_READ_BUFFER_SIZE, cursorOffset, split.getStart(), split.getEnd(), totalMessages);
                 FetchRequest req = new FetchRequestBuilder()
                         .clientId("presto-worker-" + Thread.currentThread().getName())

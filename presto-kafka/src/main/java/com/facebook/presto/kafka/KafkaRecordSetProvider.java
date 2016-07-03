@@ -55,6 +55,15 @@ public class KafkaRecordSetProvider
     {
         KafkaSplit kafkaSplit = convertSplit(split);
 
+        //Topic Meta
+        if (kafkaSplit.getPartitionId() == -1) {
+            ImmutableList.Builder<DecoderColumnHandle> handleBuilder = ImmutableList.builder();
+            for (ColumnHandle handle : columns) {
+                KafkaColumnHandle columnHandle = convertColumnHandle(handle);
+                handleBuilder.add(columnHandle);
+            }
+            return new KafkaTopicMetaRecordSet(kafkaSplit, consumerManager, handleBuilder.build());
+        }
         ImmutableList.Builder<DecoderColumnHandle> handleBuilder = ImmutableList.builder();
         ImmutableMap.Builder<DecoderColumnHandle, FieldDecoder<?>> keyFieldDecoderBuilder = ImmutableMap.builder();
         ImmutableMap.Builder<DecoderColumnHandle, FieldDecoder<?>> messageFieldDecoderBuilder = ImmutableMap.builder();

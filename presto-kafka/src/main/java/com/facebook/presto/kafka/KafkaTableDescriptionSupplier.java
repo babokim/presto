@@ -45,6 +45,7 @@ public class KafkaTableDescriptionSupplier
     private final File tableDescriptionDir;
     private final String defaultSchema;
     private final Set<String> tableNames;
+    private final String topicMetaSchema;
 
     @Inject
     KafkaTableDescriptionSupplier(KafkaConnectorConfig kafkaConnectorConfig,
@@ -56,6 +57,7 @@ public class KafkaTableDescriptionSupplier
         this.tableDescriptionDir = kafkaConnectorConfig.getTableDescriptionDir();
         this.defaultSchema = kafkaConnectorConfig.getDefaultSchema();
         this.tableNames = ImmutableSet.copyOf(kafkaConnectorConfig.getTableNames());
+        this.topicMetaSchema = kafkaConnectorConfig.getTopicMetaSchema();
     }
 
     @Override
@@ -104,6 +106,16 @@ public class KafkaTableDescriptionSupplier
                             new KafkaTopicFieldGroup(DummyRowDecoder.NAME, ImmutableList.<KafkaTopicFieldDescription>of())));
                 }
             }
+
+            //add topic schema
+            KafkaTopicDescription topicsTable = new KafkaTopicDescription(
+                KafkaConnectorConfig.TOPIC_META_TABLE_NAME,
+                topicMetaSchema,
+                KafkaConnectorConfig.TOPIC_META_TABLE_NAME,
+                new KafkaTopicFieldGroup(DummyRowDecoder.NAME, ImmutableList.<KafkaTopicFieldDescription>of()),
+                new KafkaTopicFieldGroup(DummyRowDecoder.NAME, ImmutableList.<KafkaTopicFieldDescription>of()));
+
+            builder.put(new SchemaTableName(topicMetaSchema, topicsTable.getTableName()), topicsTable);
 
             return builder.build();
         }

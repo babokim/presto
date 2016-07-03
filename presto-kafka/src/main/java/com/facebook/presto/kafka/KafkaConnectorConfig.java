@@ -34,6 +34,8 @@ public class KafkaConnectorConfig
 {
     private static final int KAFKA_DEFAULT_PORT = 9092;
 
+    public static final String TOPIC_META_TABLE_NAME = "topics";
+
     /**
      * Seed nodes for Kafka cluster. At least one must exist.
      */
@@ -53,6 +55,11 @@ public class KafkaConnectorConfig
      * The schema name to use in the connector.
      */
     private String defaultSchema = "default";
+
+    /**
+     * The schema name to use in the connector.
+     */
+    private String topicMetaSchema = "_topic_";
 
     /**
      * Set of tables known to this connector. For each table, a description file may be present in the catalog folder which describes columns for the given topic.
@@ -105,6 +112,19 @@ public class KafkaConnectorConfig
     public KafkaConnectorConfig setDefaultSchema(String defaultSchema)
     {
         this.defaultSchema = defaultSchema;
+        return this;
+    }
+
+    @NotNull
+    public String getTopicMetaSchema()
+    {
+        return topicMetaSchema;
+    }
+
+    @Config("kafka.topic-meta-schema")
+    public KafkaConnectorConfig setTopicMetaSchema(String topicMetaSchema)
+    {
+        this.topicMetaSchema = topicMetaSchema;
         return this;
     }
 

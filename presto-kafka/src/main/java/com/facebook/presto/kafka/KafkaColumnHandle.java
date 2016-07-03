@@ -73,6 +73,11 @@ public final class KafkaColumnHandle
      */
     private final boolean internal;
 
+    /**
+     * True if the column is PARTITION_ID_FIELD or PARTITION_OFFSET_FIELD
+     */
+    private final boolean partitionKey;
+
     @JsonCreator
     public KafkaColumnHandle(
             @JsonProperty("connectorId") String connectorId,
@@ -84,7 +89,8 @@ public final class KafkaColumnHandle
             @JsonProperty("formatHint") String formatHint,
             @JsonProperty("keyDecoder") boolean keyDecoder,
             @JsonProperty("hidden") boolean hidden,
-            @JsonProperty("internal") boolean internal)
+            @JsonProperty("internal") boolean internal,
+            @JsonProperty("partitionKey") boolean partitionKey)
 
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null");
@@ -97,6 +103,7 @@ public final class KafkaColumnHandle
         this.keyDecoder = keyDecoder;
         this.hidden = hidden;
         this.internal = internal;
+        this.partitionKey = partitionKey;
     }
 
     @JsonProperty
@@ -165,6 +172,12 @@ public final class KafkaColumnHandle
         return internal;
     }
 
+    @JsonProperty
+    public boolean isPartitionKey()
+  {
+    return partitionKey;
+  }
+
     ColumnMetadata getColumnMetadata()
     {
         return new ColumnMetadata(name, type, null, hidden);
@@ -173,7 +186,7 @@ public final class KafkaColumnHandle
     @Override
     public int hashCode()
     {
-        return Objects.hash(connectorId, ordinalPosition, name, type, mapping, dataFormat, formatHint, keyDecoder, hidden, internal);
+        return Objects.hash(connectorId, ordinalPosition, name, type, mapping, dataFormat, formatHint, keyDecoder, hidden, internal, partitionKey);
     }
 
     @Override
@@ -196,7 +209,8 @@ public final class KafkaColumnHandle
                 Objects.equals(this.formatHint, other.formatHint) &&
                 Objects.equals(this.keyDecoder, other.keyDecoder) &&
                 Objects.equals(this.hidden, other.hidden) &&
-                Objects.equals(this.internal, other.internal);
+                Objects.equals(this.internal, other.internal) &&
+                Objects.equals(this.partitionKey, other.partitionKey);
     }
 
     @Override
@@ -219,6 +233,7 @@ public final class KafkaColumnHandle
                 .add("keyDecoder", keyDecoder)
                 .add("hidden", hidden)
                 .add("internal", internal)
+                .add("partitionKey", partitionKey)
                 .toString();
     }
 }

@@ -25,6 +25,7 @@ import com.google.inject.Scopes;
 import com.google.inject.TypeLiteral;
 import io.airlift.bootstrap.Bootstrap;
 import io.airlift.json.JsonModule;
+import io.airlift.log.Logger;
 
 import java.util.Map;
 import java.util.Optional;
@@ -38,6 +39,7 @@ import static java.util.Objects.requireNonNull;
 public class KafkaConnectorFactory
         implements ConnectorFactory
 {
+    private static final Logger log = Logger.get(KafkaConnectorFactory.class);
     private final TypeManager typeManager;
     private final NodeManager nodeManager;
     private final Optional<Supplier<Map<SchemaTableName, KafkaTopicDescription>>> tableDescriptionSupplier;

@@ -46,6 +46,7 @@ public class KafkaConnector
             LifeCycleManager lifeCycleManager,
             KafkaMetadata metadata,
             KafkaSplitManager splitManager,
+            KafkaPartitionManager partitionManager,
             KafkaRecordSetProvider recordSetProvider)
     {
         this.lifeCycleManager = requireNonNull(lifeCycleManager, "lifeCycleManager is null");

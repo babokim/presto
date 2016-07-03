@@ -58,7 +58,7 @@ public class KafkaSplitManager
     private final String connectorId;
     private final KafkaSimpleConsumerManager consumerManager;
     private final Set<HostAddress> nodes;
-
+    private final String topicMetaSchema;
     @Inject
     public KafkaSplitManager(
             KafkaConnectorId connectorId,
@@ -70,12 +70,42 @@ public class KafkaSplitManager
 
         requireNonNull(kafkaConnectorConfig, "kafkaConfig is null");
         this.nodes = ImmutableSet.copyOf(kafkaConnectorConfig.getNodes());
+        this.topicMetaSchema = kafkaConnectorConfig.getTopicMetaSchema();
     }
 
     @Override
     public ConnectorSplitSource getSplits(ConnectorTransactionHandle transaction, ConnectorSession session, ConnectorTableLayoutHandle layout)
     {
-        KafkaTableHandle kafkaTableHandle = convertLayout(layout).getTable();
+        KafkaTableLayoutHandle kafkaLayout = convertLayout(layout);
+        KafkaTableHandle kafkaTableHandle = kafkaLayout.getTable();
+
+        if (kafkaTableHandle.getSchemaName().equals(topicMetaSchema) &&
+            kafkaTableHandle.getTableName().equals(KafkaConnectorConfig.TOPIC_META_TABLE_NAME)) {
+            KafkaSplit split = new KafkaSplit(connectorId, "", "", "", -1, -1, -1, selectRandom(nodes));
+            return new FixedSplitSource(connectorId, ImmutableList.<ConnectorSplit>builder().add(split).build());
+        }
+
+        if (kafkaLayout.getPartitions().isPresent()) {
+            List<KafkaPartition> partitions = kafkaLayout.getPartitions().get();
+
+            ImmutableList.Builder<ConnectorSplit> splits = ImmutableList.builder();
+            for (KafkaPartition partition : partitions) {
+                long startOffset = partition.getPredicateOffset();
+                startOffset = startOffset < partition.getSegment().getStartOffset() ? partition.getSegment().getStartOffset() : startOffset;
+                KafkaSplit split = new KafkaSplit(
+                    connectorId,
+                    kafkaTableHandle.getTopicName(),
+                    kafkaTableHandle.getKeyDataFormat(),
+                    kafkaTableHandle.getMessageDataFormat(),
+                    partition.getSegment().getPartitionId(),
+                    startOffset,
+                    partition.getSegment().getEndOffset(),
+                    partition.getSegment().getLeaderNode());
+                splits.add(split);
+            }
+
+            return new FixedSplitSource(connectorId, splits.build());
+        }
 
         SimpleConsumer simpleConsumer = consumerManager.getConsumer(selectRandom(nodes));
 
@@ -99,18 +129,18 @@ public class KafkaSplitManager
                 SimpleConsumer leaderConsumer = consumerManager.getConsumer(partitionLeader);
                 // Kafka contains a reverse list of "end - start" pairs for the splits
 
-                long[] offsets = findAllOffsets(leaderConsumer,  metadata.topic(), part.partitionId());
+                long[] offsets = findAllOffsets(leaderConsumer, metadata.topic(), part.partitionId());
 
                 for (int i = offsets.length - 1; i > 0; i--) {
                     KafkaSplit split = new KafkaSplit(
-                            connectorId,
-                            metadata.topic(),
-                            kafkaTableHandle.getKeyDataFormat(),
-                            kafkaTableHandle.getMessageDataFormat(),
-                            part.partitionId(),
-                            offsets[i],
-                            offsets[i - 1],
-                            partitionLeader);
+                        connectorId,
+                        metadata.topic(),
+                        kafkaTableHandle.getKeyDataFormat(),
+                        kafkaTableHandle.getMessageDataFormat(),
+                        part.partitionId(),
+                        offsets[i],
+                        offsets[i - 1],
+                        partitionLeader);
                     splits.add(split);
                 }
             }
@@ -119,7 +149,7 @@ public class KafkaSplitManager
         return new FixedSplitSource(connectorId, splits.build());
     }
 
-    private static long[] findAllOffsets(SimpleConsumer consumer, String topicName, int partitionId)
+    public static long[] findAllOffsets(SimpleConsumer consumer, String topicName, int partitionId)
     {
         TopicAndPartition topicAndPartition = new TopicAndPartition(topicName, partitionId);
 

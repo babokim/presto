@@ -27,9 +27,11 @@ import com.facebook.presto.spi.SchemaTableName;
 import com.facebook.presto.spi.SchemaTablePrefix;
 import com.facebook.presto.spi.TableNotFoundException;
 import com.facebook.presto.spi.connector.ConnectorMetadata;
+import com.facebook.presto.spi.predicate.NullableValue;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import io.airlift.log.Logger;
 
 import javax.inject.Inject;
 
@@ -37,6 +39,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static com.facebook.presto.kafka.KafkaHandleResolver.convertColumnHandle;
@@ -51,17 +54,21 @@ import static java.util.Objects.requireNonNull;
 public class KafkaMetadata
         implements ConnectorMetadata
 {
+    private static final Logger log = Logger.get(KafkaMetadata.class);
     private final String connectorId;
     private final boolean hideInternalColumns;
     private final Map<SchemaTableName, KafkaTopicDescription> tableDescriptions;
     private final Set<KafkaInternalFieldDescription> internalFieldDescriptions;
+    private KafkaPartitionManager partitionManager;
+    private final String topicMetaSchema;
 
     @Inject
     public KafkaMetadata(
             KafkaConnectorId connectorId,
             KafkaConnectorConfig kafkaConnectorConfig,
             Supplier<Map<SchemaTableName, KafkaTopicDescription>> kafkaTableDescriptionSupplier,
-            Set<KafkaInternalFieldDescription> internalFieldDescriptions)
+            Set<KafkaInternalFieldDescription> internalFieldDescriptions,
+            KafkaPartitionManager partitionManager)
     {
         this.connectorId = requireNonNull(connectorId, "connectorId is null").toString();
 
@@ -71,6 +78,8 @@ public class KafkaMetadata
         requireNonNull(kafkaTableDescriptionSupplier, "kafkaTableDescriptionSupplier is null");
         this.tableDescriptions = kafkaTableDescriptionSupplier.get();
         this.internalFieldDescriptions = requireNonNull(internalFieldDescriptions, "internalFieldDescriptions is null");
+        this.partitionManager = requireNonNull(partitionManager, "partitionManager is null");
+        this.topicMetaSchema = kafkaConnectorConfig.getTopicMetaSchema();
     }
 
     @Override
@@ -135,8 +144,15 @@ public class KafkaMetadata
         }
 
         ImmutableMap.Builder<String, ColumnHandle> columnHandles = ImmutableMap.builder();
-
         int index = 0;
+
+        if (kafkaTableHandle.getSchemaName().equals(topicMetaSchema) && kafkaTableHandle.getTableName().equals(KafkaConnectorConfig.TOPIC_META_TABLE_NAME)) {
+            for (KafkaInternalFieldDescription kafkaInternalFieldDescription : KafkaInternalFieldDescription.getTopicMetaFields()) {
+                columnHandles.put(kafkaInternalFieldDescription.getName(), kafkaInternalFieldDescription.getColumnHandle(connectorId, index++, false));
+            }
+            return columnHandles.build();
+        }
+
         KafkaTopicFieldGroup key = kafkaTopicDescription.getKey();
         if (key != null) {
             List<KafkaTopicFieldDescription> fields = key.getFields();
@@ -194,8 +210,46 @@ public class KafkaMetadata
     public List<ConnectorTableLayoutResult> getTableLayouts(ConnectorSession session, ConnectorTableHandle table, Constraint<ColumnHandle> constraint, Optional<Set<ColumnHandle>> desiredColumns)
     {
         KafkaTableHandle handle = convertTableHandle(table);
-        ConnectorTableLayout layout = new ConnectorTableLayout(new KafkaTableLayoutHandle(handle));
-        return ImmutableList.of(new ConnectorTableLayoutResult(layout, constraint.getSummary()));
+        if (handle.getSchemaName().equals(topicMetaSchema) && handle.getTableName().equals(KafkaConnectorConfig.TOPIC_META_TABLE_NAME)) {
+            ConnectorTableLayout layout = new ConnectorTableLayout(new KafkaTableLayoutHandle(handle));
+            return ImmutableList.of(new ConnectorTableLayoutResult(layout, constraint.getSummary()));
+        }
+
+        KafkaPartitionResult kafkaPartitionResult = partitionManager.getPartitions(session, table, getTableMetadata(handle.toSchemaTableName()), constraint.getSummary());
+
+        ImmutableList.Builder<KafkaPartition> partitionBuilder = ImmutableList.builder();
+        for (KafkaPartition partition : kafkaPartitionResult.getPartitions()) {
+            Predicate<Map<ColumnHandle, NullableValue>> predicate = constraint.predicate();
+            boolean matched = predicate.test(partition.getPartitionKeys());
+            if (matched) {
+                partitionBuilder.add(partition);
+            }
+        }
+        List<KafkaPartition> partitions = partitionBuilder.build();
+
+//        List<KafkaPartition> partitions = kafkaPartitionResult.getPartitions().stream()
+//            .filter(partition -> constraint.predicate().test(partition.getPartitionKeys()))
+//            .collect(toList());
+
+        if (partitions.isEmpty()) {
+            ConnectorTableLayout layout = new ConnectorTableLayout(new KafkaTableLayoutHandle(handle));
+            return ImmutableList.of(new ConnectorTableLayoutResult(layout, constraint.getSummary()));
+        }
+
+//        return ImmutableList.of(new ConnectorTableLayoutResult(
+//            getTableLayout(session, new KafkaTableLayoutHandle(handle,
+//                ImmutableList.copyOf(kafkaPartitionResult.getPartitionColumns()),
+//                partitions,
+//                kafkaPartitionResult.getEnforcedConstraint())),
+//            kafkaPartitionResult.getUnenforcedConstraint()));
+
+        ConnectorTableLayout layout = new ConnectorTableLayout(
+            new KafkaTableLayoutHandle(handle,
+                ImmutableList.copyOf(kafkaPartitionResult.getPartitionColumns()),
+                partitions,
+                kafkaPartitionResult.getEnforcedConstraint()));
+
+        return ImmutableList.of(new ConnectorTableLayoutResult(layout, kafkaPartitionResult.getUnenforcedConstraint()));
     }
 
     @Override
@@ -213,6 +267,13 @@ public class KafkaMetadata
         }
 
         ImmutableList.Builder<ColumnMetadata> builder = ImmutableList.builder();
+
+        if (schemaTableName.getSchemaName().equals(topicMetaSchema) && schemaTableName.getTableName().equals(KafkaConnectorConfig.TOPIC_META_TABLE_NAME)) {
+            for (KafkaInternalFieldDescription fieldDescription : KafkaInternalFieldDescription.getTopicMetaFields()) {
+                builder.add(fieldDescription.getColumnMetadata(false));
+            }
+            return new ConnectorTableMetadata(schemaTableName, builder.build());
+        }
 
         KafkaTopicFieldGroup key = table.getKey();
         if (key != null) {

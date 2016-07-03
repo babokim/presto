@@ -95,12 +95,19 @@ public class KafkaInternalFieldDescription
      */
     public static final KafkaInternalFieldDescription KEY_LENGTH_FIELD = new KafkaInternalFieldDescription("_key_length", BigintType.BIGINT, "Total number of key bytes");
 
+    public static final KafkaInternalFieldDescription TOPIC_NAME_FIELD = new KafkaInternalFieldDescription("_topic_name", createUnboundedVarcharType(), "Topic name");
+
     public static Set<KafkaInternalFieldDescription> getInternalFields()
     {
         return ImmutableSet.of(PARTITION_ID_FIELD, PARTITION_OFFSET_FIELD,
                 SEGMENT_START_FIELD, SEGMENT_END_FIELD, SEGMENT_COUNT_FIELD,
                 KEY_FIELD, KEY_CORRUPT_FIELD, KEY_LENGTH_FIELD,
                 MESSAGE_FIELD, MESSAGE_CORRUPT_FIELD, MESSAGE_LENGTH_FIELD);
+    }
+
+    public static Set<KafkaInternalFieldDescription> getTopicMetaFields()
+    {
+        return ImmutableSet.of(TOPIC_NAME_FIELD, PARTITION_ID_FIELD, PARTITION_OFFSET_FIELD, SEGMENT_END_FIELD);
     }
 
     private final String name;
@@ -130,6 +137,7 @@ public class KafkaInternalFieldDescription
 
     KafkaColumnHandle getColumnHandle(String connectorId, int index, boolean hidden)
     {
+        boolean partitionKey =  this.equals(PARTITION_ID_FIELD) || this.equals(PARTITION_OFFSET_FIELD);
         return new KafkaColumnHandle(connectorId,
                 index,
                 getName(),
@@ -139,7 +147,8 @@ public class KafkaInternalFieldDescription
                 null,
                 false,
                 hidden,
-                true);
+                true,
+                partitionKey);
     }
 
     ColumnMetadata getColumnMetadata(boolean hidden)

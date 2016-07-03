@@ -111,6 +111,7 @@ public final class KafkaTopicFieldDescription
                 getFormatHint(),
                 keyDecoder,
                 isHidden(),
+                false,
                 false);
     }
 
