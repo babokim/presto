@@ -82,7 +82,13 @@ public class PrestoConnection
 
         this.user = requireNonNull(user, "user is null");
         this.queryExecutor = requireNonNull(queryExecutor, "queryExecutor is null");
-        timeZoneId.set(TimeZone.getDefault().getID());
+
+        if (uri.getConnectionParams().get("timezone") != null) {
+            timeZoneId.set(uri.getConnectionParams().get("timezone"));
+        }
+        else {
+            timeZoneId.set(TimeZone.getDefault().getID());
+        }
         locale.set(Locale.getDefault());
     }
 

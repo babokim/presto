@@ -42,6 +42,7 @@ final class PrestoDriverUri
 
     private String catalog;
     private String schema;
+    private Map<String, String> connectionParams;
 
     private final boolean useSecureConnection;
 
@@ -57,10 +58,15 @@ final class PrestoDriverUri
         this.uri = requireNonNull(uri, "uri is null");
         this.address = HostAndPort.fromParts(uri.getHost(), uri.getPort());
 
-        Map<String, String> params = parseParameters(uri.getQuery());
-        useSecureConnection = Boolean.parseBoolean(params.get("secure"));
+        connectionParams = parseParameters(uri.getQuery());
+        useSecureConnection = Boolean.parseBoolean(connectionParams.get("secure"));
 
         initCatalogAndSchema();
+    }
+
+    public Map<String, String> getConnectionParams()
+    {
+        return connectionParams;
     }
 
     public URI getJdbcUri()
