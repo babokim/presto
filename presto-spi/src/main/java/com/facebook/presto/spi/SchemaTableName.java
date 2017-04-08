@@ -15,6 +15,7 @@ package com.facebook.presto.spi;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
+import io.airlift.log.Logger;
 
 import java.util.Objects;
 
@@ -23,8 +24,11 @@ import static java.util.Locale.ENGLISH;
 
 public class SchemaTableName
 {
-    private final String schemaName;
-    private final String tableName;
+    private static final Logger log = Logger.get(SchemaTableName.class);
+    private String originSchemaName;
+    private String originTableName;
+    private String schemaName;
+    private String tableName;
 
     @JsonCreator
     public static SchemaTableName valueOf(String schemaTableName)
@@ -39,8 +43,19 @@ public class SchemaTableName
 
     public SchemaTableName(String schemaName, String tableName)
     {
-        this.schemaName = checkNotEmpty(schemaName, "schemaName").toLowerCase(ENGLISH);
-        this.tableName = checkNotEmpty(tableName, "tableName").toLowerCase(ENGLISH);
+        setName(schemaName, tableName);
+    }
+
+    public void setName(String schemaName, String tableName)
+    {
+      this.originSchemaName = schemaName;
+      this.originTableName = tableName;
+      if (schemaName == null || tableName == null) {
+        Exception err = new Exception("Null");
+        log.error(err, "schemaName or tableName is null: " + schemaName + "," + tableName);
+      }
+      this.schemaName = checkNotEmpty(schemaName, "schemaName").toLowerCase(ENGLISH).replace("-", "_");
+      this.tableName = checkNotEmpty(tableName, "tableName").toLowerCase(ENGLISH);
     }
 
     public String getSchemaName()
@@ -52,6 +67,16 @@ public class SchemaTableName
     {
         return tableName;
     }
+
+    public String getOriginSchemaName()
+    {
+      return originSchemaName;
+    }
+
+    public String getOriginTableName()
+  {
+    return originTableName;
+  }
 
     @Override
     public int hashCode()
@@ -69,15 +94,17 @@ public class SchemaTableName
             return false;
         }
         final SchemaTableName other = (SchemaTableName) obj;
-        return Objects.equals(this.schemaName, other.schemaName) &&
-                Objects.equals(this.tableName, other.tableName);
+        return (Objects.equals(this.schemaName, other.schemaName) &&
+                Objects.equals(this.tableName, other.tableName)) ||
+            (Objects.equals(this.originSchemaName, other.originSchemaName) &&
+                Objects.equals(this.originTableName, other.originTableName));
     }
 
     @JsonValue
     @Override
     public String toString()
     {
-        return schemaName + '.' + tableName;
+        return originSchemaName + '.' + originTableName;
     }
 
     public SchemaTablePrefix toSchemaTablePrefix()

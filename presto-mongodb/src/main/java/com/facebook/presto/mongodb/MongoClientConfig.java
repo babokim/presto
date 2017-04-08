@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.mongodb.MongoCredential;
 import com.mongodb.ServerAddress;
 import io.airlift.configuration.Config;
+import io.airlift.log.Logger;
 
 import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
@@ -32,6 +33,7 @@ import static com.mongodb.MongoCredential.createCredential;
 
 public class MongoClientConfig
 {
+    private static final Logger log = Logger.get(MongoClientConfig.class);
     private static final Splitter SPLITTER = Splitter.on(',').trimResults().omitEmptyStrings();
     private static final Splitter PORT_SPLITTER = Splitter.on(':').trimResults().omitEmptyStrings();
     private static final Splitter USER_SPLITTER = Splitter.onPattern("[:@]").trimResults().omitEmptyStrings();
@@ -136,6 +138,7 @@ public class MongoClientConfig
         for (String userPass : userPasses) {
             List<String> values = USER_SPLITTER.splitToList(userPass);
             checkArgument(values.size() == 3, "Invalid Credential format. Requires user:password@collection");
+
             builder.add(createCredential(values.get(0), values.get(2), values.get(1).toCharArray()));
         }
         return builder.build();

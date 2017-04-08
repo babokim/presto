@@ -20,6 +20,7 @@ import com.google.inject.Provides;
 import com.google.inject.Scopes;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
+import io.airlift.log.Logger;
 
 import javax.inject.Singleton;
 
@@ -29,6 +30,7 @@ import static java.util.Objects.requireNonNull;
 public class MongoClientModule
         implements Module
 {
+    private static final Logger log = Logger.get(MongoClientModule.class);
     @Override
     public void configure(Binder binder)
     {
@@ -62,8 +64,7 @@ public class MongoClientModule
             options.requiredReplicaSetName(config.getRequiredReplicaSetName());
         }
 
-        MongoClient client = new MongoClient(config.getSeeds(), config.getCredentials(), options.build());
-
+        MongoClient client = new MongoClient(config.getSeeds().get(0), config.getCredentials(), options.build());
         return new MongoSession(
                 typeManager,
                 client,

@@ -211,7 +211,7 @@ public class MongoSession
 
     public MongoCollection<Document> getCollection(SchemaTableName tableName)
     {
-        return getCollection(tableName.getSchemaName(), tableName.getTableName());
+        return getCollection(tableName.getOriginSchemaName(), tableName.getOriginTableName());
     }
 
     private MongoCollection<Document> getCollection(String schema, String table)
@@ -375,8 +375,8 @@ public class MongoSession
     private Document getTableMetadata(SchemaTableName schemaTableName)
             throws TableNotFoundException
     {
-        String schemaName = schemaTableName.getSchemaName();
-        String tableName = schemaTableName.getTableName();
+        String schemaName = schemaTableName.getOriginSchemaName();
+        String tableName = schemaTableName.getOriginTableName();
 
         MongoDatabase db = client.getDatabase(schemaName);
         MongoCollection<Document> schema = db.getCollection(schemaCollection);
@@ -430,8 +430,8 @@ public class MongoSession
     private void createTableMetadata(SchemaTableName schemaTableName, List<MongoColumnHandle> columns)
             throws TableNotFoundException
     {
-        String schemaName = schemaTableName.getSchemaName();
-        String tableName = schemaTableName.getTableName();
+        String schemaName = schemaTableName.getOriginSchemaName();
+        String tableName = schemaTableName.getOriginTableName();
 
         MongoDatabase db = client.getDatabase(schemaName);
         Document metadata = new Document(TABLE_NAME_KEY, tableName);
@@ -454,8 +454,8 @@ public class MongoSession
 
     private boolean deleteTableMetadata(SchemaTableName schemaTableName)
     {
-        String schemaName = schemaTableName.getSchemaName();
-        String tableName = schemaTableName.getTableName();
+        String schemaName = schemaTableName.getOriginSchemaName();
+        String tableName = schemaTableName.getOriginTableName();
 
         MongoDatabase db = client.getDatabase(schemaName);
         if (!collectionExists(db, tableName)) {
@@ -470,8 +470,8 @@ public class MongoSession
 
     private List<Document> guessTableFields(SchemaTableName schemaTableName)
     {
-        String schemaName = schemaTableName.getSchemaName();
-        String tableName = schemaTableName.getTableName();
+        String schemaName = schemaTableName.getOriginSchemaName();
+        String tableName = schemaTableName.getOriginTableName();
 
         MongoDatabase db = client.getDatabase(schemaName);
         Document doc = db.getCollection(tableName).find().first();

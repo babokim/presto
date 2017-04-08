@@ -40,7 +40,9 @@ import com.google.common.collect.ImmutableMap;
 import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -61,6 +63,11 @@ public class MongoMetadata
 
     private final AtomicReference<Runnable> rollbackAction = new AtomicReference<>();
 
+    //lowercase -> origin name
+    private final Map<String, String> originSchemaNames = new HashMap<String, String>();
+
+    private final Map<String, String> originTableNames = new HashMap<String, String>();
+
     public MongoMetadata(MongoSession mongoSession)
     {
         this.mongoSession = requireNonNull(mongoSession, "mongoSession is null");
@@ -69,12 +76,50 @@ public class MongoMetadata
     @Override
     public List<String> listSchemaNames(ConnectorSession session)
     {
-        return mongoSession.getAllSchemas();
+      synchronized (originSchemaNames) {
+        List<String> schemas = mongoSession.getAllSchemas();
+        List<String> lowercaseSchemas = new ArrayList<String>();
+        schemas.stream().forEach(schema -> {
+          String convertedSchemaName = schema.toLowerCase(ENGLISH).replace("-", "_");
+          originSchemaNames.put(schema, schema);
+          originSchemaNames.put(convertedSchemaName, schema);
+          lowercaseSchemas.add(convertedSchemaName);
+        });
+        return lowercaseSchemas;
+      }
+    }
+
+    private String getOriginSchemaName(String schema)
+    {
+      if (originSchemaNames.isEmpty()) {
+        listSchemaNames(null);
+        listTables(null, (String)null);
+      }
+      if (schema == null) {
+        Exception e = new Exception("ERROR");
+        log.error(e, "Schema is null");
+      }
+      synchronized (originSchemaNames) {
+        return originSchemaNames.get(schema);
+      }
+    }
+
+    private String getOriginTableName(String schemaName, String tableName)
+    {
+      return originTableNames.get(getOriginSchemaName(schemaName) + "." + tableName);
     }
 
     @Override
     public MongoTableHandle getTableHandle(ConnectorSession session, SchemaTableName tableName)
     {
+        String originSchemaName = getOriginSchemaName(tableName.getSchemaName());
+        String originTableName = getOriginTableName(originSchemaName, tableName.getTableName());
+        if (originSchemaName == null || originTableName == null) {
+          log.error("Can't get origin tableName: %s, %s", originSchemaName, tableName.getTableName());
+          return null;
+        }
+        tableName.setName(originSchemaName, originTableName);
+
         requireNonNull(tableName, "tableName is null");
         try {
             return mongoSession.getTable(tableName).getTableHandle();
@@ -90,6 +135,9 @@ public class MongoMetadata
     {
         requireNonNull(tableHandle, "tableHandle is null");
         SchemaTableName tableName = getTableName(tableHandle);
+        String originSchemaName = getOriginSchemaName(tableName.getSchemaName());
+        String originTableName = getOriginTableName(originSchemaName, tableName.getTableName());
+        tableName.setName(originSchemaName, originTableName);
         return getTableMetadata(session, tableName);
     }
 
@@ -98,10 +146,15 @@ public class MongoMetadata
     {
         ImmutableList.Builder<SchemaTableName> tableNames = ImmutableList.builder();
 
-        for (String schemaName : listSchemas(session, schemaNameOrNull)) {
-            for (String tableName : mongoSession.getAllTables(schemaName)) {
-                tableNames.add(new SchemaTableName(schemaName, tableName.toLowerCase(ENGLISH)));
+        synchronized (originTableNames) {
+          for (String schemaName : listSchemas(session, schemaNameOrNull)) {
+            for (String tableName : mongoSession.getAllTables(getOriginSchemaName(schemaName))) {
+              String originSchemaName = getOriginSchemaName(schemaName);
+              originTableNames.put(originSchemaName + "." + tableName.toLowerCase(ENGLISH), tableName);
+              originTableNames.put(originSchemaName + "." + tableName, tableName);
+              tableNames.add(new SchemaTableName(originSchemaName, tableName));
             }
+          }
         }
         return tableNames.build();
     }
@@ -260,6 +313,10 @@ public class MongoMetadata
 
     private ConnectorTableMetadata getTableMetadata(ConnectorSession session, SchemaTableName tableName)
     {
+        String originSchemaName = getOriginSchemaName(tableName.getSchemaName());
+        String originTableName = getOriginTableName(originSchemaName, tableName.getTableName());
+        tableName.setName(originSchemaName, originTableName);
+
         MongoTableHandle tableHandle = mongoSession.getTable(tableName).getTableHandle();
 
         List<ColumnMetadata> columns = ImmutableList.copyOf(
@@ -284,7 +341,13 @@ public class MongoMetadata
         if (prefix.getSchemaName() == null) {
             return listTables(session, prefix.getSchemaName());
         }
-        return ImmutableList.of(new SchemaTableName(prefix.getSchemaName(), prefix.getTableName()));
+        String originSchemaName = originSchemaNames.get(prefix.getSchemaName());
+        if (originSchemaName == null) {
+          return listTables(session, originSchemaName);
+        }
+
+        return ImmutableList.of(new SchemaTableName(originSchemaName,
+            originTableNames.get(originSchemaName + "." + prefix.getTableName())));
     }
 
     private static List<MongoColumnHandle> buildColumnHandles(ConnectorTableMetadata tableMetadata)
