@@ -39,6 +39,7 @@ import com.facebook.presto.spi.type.VarbinaryType;
 import com.google.common.collect.ImmutableList;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.model.InsertManyOptions;
+import io.airlift.log.Logger;
 import io.airlift.slice.Slice;
 import org.bson.Document;
 import org.bson.types.Binary;
@@ -69,6 +70,7 @@ import static java.util.concurrent.CompletableFuture.completedFuture;
 public class MongoPageSink
         implements ConnectorPageSink
 {
+    private static final Logger log = Logger.get(MongoSession.class);
     private final MongoSession mongoSession;
     private final ConnectorSession session;
     private final SchemaTableName schemaTableName;
@@ -99,6 +101,12 @@ public class MongoPageSink
 
             for (int channel = 0; channel < page.getChannelCount(); channel++) {
                 MongoColumnHandle column = columns.get(channel);
+//                if (column.getName().equalsIgnoreCase("_id")) {
+//                  ObjectId id = (ObjectId)getObjectValue(columns.get(channel).getType(), page.getBlock(channel), position);
+//                  doc.append(column.getName(), "AAA:" + id.toHexString() + "," + (new String(id.toByteArray())));
+//                } else {
+//                  doc.append(column.getName(), getObjectValue(columns.get(channel).getType(), page.getBlock(channel), position));
+//                }
                 doc.append(column.getName(), getObjectValue(columns.get(channel).getType(), page.getBlock(channel), position));
             }
             batch.add(doc);

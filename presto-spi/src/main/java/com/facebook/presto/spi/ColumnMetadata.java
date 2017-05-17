@@ -14,6 +14,7 @@
 package com.facebook.presto.spi;
 
 import com.facebook.presto.spi.type.Type;
+import com.facebook.presto.spi.type.VarcharType;
 
 import java.util.Objects;
 
@@ -47,7 +48,12 @@ public class ColumnMetadata
         }
 
         this.name = name.toLowerCase(ENGLISH);
-        this.type = type;
+        if ("_id".equals(this.name)) {
+            this.type = VarcharType.VARCHAR;
+        }
+        else {
+            this.type = type;
+        }
         this.comment = comment;
         this.extraInfo = extraInfo;
         this.hidden = hidden;

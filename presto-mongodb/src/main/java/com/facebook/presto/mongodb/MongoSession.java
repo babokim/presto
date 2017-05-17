@@ -20,12 +20,7 @@ import com.facebook.presto.spi.TableNotFoundException;
 import com.facebook.presto.spi.predicate.Domain;
 import com.facebook.presto.spi.predicate.Range;
 import com.facebook.presto.spi.predicate.TupleDomain;
-import com.facebook.presto.spi.type.NamedTypeSignature;
-import com.facebook.presto.spi.type.StandardTypes;
-import com.facebook.presto.spi.type.Type;
-import com.facebook.presto.spi.type.TypeManager;
-import com.facebook.presto.spi.type.TypeSignature;
-import com.facebook.presto.spi.type.TypeSignatureParameter;
+import com.facebook.presto.spi.type.*;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
 import com.google.common.cache.CacheBuilder;
@@ -63,6 +58,7 @@ import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.BooleanType.BOOLEAN;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
 import static com.facebook.presto.spi.type.TimestampType.TIMESTAMP;
+import static com.facebook.presto.spi.type.VarcharType.VARCHAR;
 import static com.facebook.presto.spi.type.VarcharType.createUnboundedVarcharType;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.base.Verify.verify;
@@ -82,6 +78,7 @@ public class MongoSession
     private static final String FIELDS_NAME_KEY = "name";
     private static final String FIELDS_TYPE_KEY = "type";
     private static final String FIELDS_HIDDEN_KEY = "hidden";
+    private static final String FIELDS_OBJECT_ID_TYPE_KEY = "objectIdType";
 
     private static final String OR_OP = "$or";
     private static final String AND_OP = "$and";
@@ -194,10 +191,14 @@ public class MongoSession
         String name = columnMeta.getString(FIELDS_NAME_KEY);
         String typeString = columnMeta.getString(FIELDS_TYPE_KEY);
         boolean hidden = columnMeta.getBoolean(FIELDS_HIDDEN_KEY, false);
-
         Type type = typeManager.getType(TypeSignature.parseTypeSignature(typeString));
 
-        return new MongoColumnHandle(name, type, hidden);
+        boolean objectIdType = false;
+        if (type.equals(OBJECT_ID)) {
+          type = VarcharType.VARCHAR;
+          objectIdType = true;
+        }
+        return new MongoColumnHandle(name, type, hidden, objectIdType);
     }
 
     private List<Document> getColumnMetadata(Document doc)
@@ -437,8 +438,8 @@ public class MongoSession
         Document metadata = new Document(TABLE_NAME_KEY, tableName);
 
         ArrayList<Document> fields = new ArrayList<>();
-        if (!columns.stream().anyMatch(c -> c.getName().equals("_id"))) {
-            fields.add(new MongoColumnHandle("_id", OBJECT_ID, true).getDocument());
+        if (!columns.stream().anyMatch(c -> c.getName().equalsIgnoreCase("_id"))) {
+            fields.add(new MongoColumnHandle("_id", VarcharType.VARCHAR, true, true).getDocument());
         }
 
         fields.addAll(columns.stream()
@@ -488,10 +489,16 @@ public class MongoSession
             if (fieldType.isPresent()) {
                 Document metadata = new Document();
                 metadata.append(FIELDS_NAME_KEY, key);
-                metadata.append(FIELDS_TYPE_KEY, fieldType.get().toString());
-                metadata.append(FIELDS_HIDDEN_KEY,
-                        key.equals("_id") && fieldType.get().equals(OBJECT_ID.getTypeSignature()));
+                if (fieldType.get().equals(OBJECT_ID.getTypeSignature())) {
+                  metadata.append(FIELDS_TYPE_KEY, VARCHAR.toString());
+                } else {
+                  metadata.append(FIELDS_TYPE_KEY, fieldType.get().toString());
+                }
+//                metadata.append(FIELDS_HIDDEN_KEY,
+//                        key.equals("_id") && fieldType.get().equals(OBJECT_ID.getTypeSignature()));
 
+                metadata.append(FIELDS_HIDDEN_KEY, key.equalsIgnoreCase("_id"));
+                metadata.append(FIELDS_OBJECT_ID_TYPE_KEY, fieldType.get().equals(OBJECT_ID.getTypeSignature()));
                 builder.add(metadata);
             }
             else {
